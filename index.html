@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Aesthetic Real-time Weather Forecast app featuring temperature and humidity trends, 24-hour hourly graphs, 7-day forecast, air quality, dynamic starry skies, and rain particles.">
+    <title>SkyPulse Weather | Aesthetic Live Weather & Trends</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
+    <!-- Chart.js for Interactive Temperature & Humidity Graphs -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    
+    <!-- Custom Aesthetic Stylesheet -->
+    <link rel="stylesheet" href="static/css/style.css">
+</head>
+<body class="theme-clear-night">
+    <!-- Aesthetic Atmospheric Dynamic Background Engine -->
+    <div class="sky-background-layer" id="skyBackground">
+        <canvas id="weatherCanvas" class="weather-canvas"></canvas>
+        <div class="ambient-glow glow-1" id="glow1"></div>
+        <div class="ambient-glow glow-2" id="glow2"></div>
+        <div class="ambient-glow glow-3" id="glow3"></div>
+        <div class="ambient-glow glow-4" id="glow4"></div>
+        <div class="aurora-mesh" id="auroraMesh"></div>
+        <div class="cursor-glow" id="cursorGlow"></div>
+    </div>
+
+    <div class="app-container">
+        <!-- Top Navigation Bar -->
+        <header class="app-header">
+            <div class="brand">
+                <div class="brand-icon">
+                    <i class="fa-solid fa-cloud-bolt"></i>
+                </div>
+                <div class="brand-text">
+                    <span class="brand-title">SkyPulse</span>
+                    <span class="brand-subtitle">Aesthetic Weather Forecast</span>
+                </div>
+            </div>
+
+            <!-- Global Search & Location Controls -->
+            <div class="search-wrapper">
+                <div class="search-box">
+                    <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                    <input 
+                        type="text" 
+                        id="citySearchInput" 
+                        placeholder="Search city, state or country..." 
+                        autocomplete="off"
+                        aria-label="Search city name"
+                    >
+                    <button class="icon-btn clear-btn hidden" id="clearSearchBtn" title="Clear input" aria-label="Clear search input">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                    <button class="geo-btn" id="geoBtn" title="Use My Current Location" aria-label="Use Current Location">
+                        <i class="fa-solid fa-location-crosshairs"></i>
+                        <span>Auto Locate</span>
+                    </button>
+                </div>
+                
+                <!-- Auto-complete Suggestions Dropdown -->
+                <div class="suggestions-dropdown hidden" id="suggestionsDropdown"></div>
+            </div>
+
+            <!-- Controls Right: Units Switcher & Aesthetic Theme Selector -->
+            <div class="controls-right">
+                <div class="theme-picker-pill" id="themePickerPill" title="Switch Atmospheric Background Vibes">
+                    <i class="fa-solid fa-wand-magic-sparkles theme-picker-icon"></i>
+                    <select id="themeSelector" class="theme-select" aria-label="Choose Background Atmosphere">
+                        <option value="auto">✨ Auto (Weather)</option>
+                        <option value="night">🌌 Starry Night</option>
+                        <option value="day">☀️ Azure Daylight</option>
+                        <option value="rain">🌧️ Rainy Mood</option>
+                        <option value="thunder">⚡ Storm Violet</option>
+                        <option value="snow">❄️ Arctic Frost</option>
+                    </select>
+                </div>
+
+                <div class="unit-toggle" id="unitToggle" role="group" aria-label="Temperature unit toggle">
+                    <button class="unit-btn active" data-unit="metric" id="unitMetric">°C, km/h</button>
+                    <button class="unit-btn" data-unit="imperial" id="unitImperial">°F, mph</button>
+                </div>
+
+                <button class="icon-btn refresh-btn" id="refreshBtn" title="Refresh Weather Data" aria-label="Refresh Data">
+                    <i class="fa-solid fa-rotate"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- Quick Popular Location Chips -->
+        <section class="quick-locations-bar">
+            <div class="quick-chips-label"><i class="fa-solid fa-fire"></i> Popular:</div>
+            <div class="chips-container" id="popularChips">
+                <button class="chip" data-city="London">🇬🇧 London</button>
+                <button class="chip" data-city="New York">🇺🇸 New York</button>
+                <button class="chip" data-city="Tokyo">🇯🇵 Tokyo</button>
+                <button class="chip" data-city="Paris">🇫🇷 Paris</button>
+                <button class="chip" data-city="Dubai">🇦🇪 Dubai</button>
+                <button class="chip" data-city="Mumbai">🇮🇳 Mumbai</button>
+                <button class="chip" data-city="Patna">🇮🇳 Patna</button>
+                <button class="chip" data-city="Sydney">🇦🇺 Sydney</button>
+                <button class="chip" data-city="Singapore">🇸🇬 Singapore</button>
+            </div>
+            <div class="recent-chips-wrapper hidden" id="recentChipsWrapper">
+                <div class="quick-chips-label"><i class="fa-solid fa-clock-rotate-left"></i> Recent:</div>
+                <div class="chips-container" id="recentChips"></div>
+            </div>
+        </section>
+
+        <!-- Loading Overlay / State -->
+        <div class="loading-state hidden" id="loadingState">
+            <div class="spinner"></div>
+            <p>Fetching real-time atmospheric data...</p>
+        </div>
+
+        <!-- Error Notification Toast -->
+        <div class="toast-error hidden" id="errorToast">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+            <span id="errorMessage">Unable to fetch weather data.</span>
+            <button class="toast-close" id="closeErrorToast"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <!-- Main Dashboard Content -->
+        <main class="dashboard-grid" id="mainDashboard">
+            
+            <!-- Left / Main Column: Hero Overview & Trend Analytics -->
+            <div class="dashboard-main-col">
+                
+                <!-- Hero Weather Card -->
+                <section class="glass-card hero-weather-card" id="heroCard">
+                    <div class="hero-top-row">
+                        <div class="location-meta">
+                            <div class="location-badge">
+                                <i class="fa-solid fa-location-dot"></i>
+                                <h1 class="location-name" id="locName">London</h1>
+                                <span class="country-tag" id="locCountry">GB</span>
+                            </div>
+                            <div class="time-meta">
+                                <span id="locTime">Tuesday, 14:30</span> • <span id="locTimezone">Europe/London</span>
+                            </div>
+                        </div>
+                        <div class="condition-badge" id="conditionBadge">
+                            <span class="condition-dot"></span>
+                            <span id="conditionLabel">Partly Cloudy</span>
+                        </div>
+                    </div>
+
+                    <div class="hero-center-row">
+                        <div class="temperature-block">
+                            <div class="temp-huge" id="currentTemp">21<span class="unit-symbol">°C</span></div>
+                            <div class="temp-sub-meta">
+                                <span class="feels-like">Feels like <strong id="feelsLikeTemp">22°C</strong></span>
+                                <span class="temp-separator">•</span>
+                                <span class="temp-minmax"><i class="fa-solid fa-arrow-down temp-down"></i> <span id="dayMinTemp">16°</span> <i class="fa-solid fa-arrow-up temp-up"></i> <span id="dayMaxTemp">24°</span></span>
+                            </div>
+                            <p class="condition-desc" id="conditionDescription">Scattered clouds with mild gentle breeze throughout the day.</p>
+                        </div>
+                        
+                        <div class="hero-icon-block">
+                            <div class="animated-weather-icon-wrapper" id="heroIconWrapper">
+                                <i class="fa-solid fa-cloud-sun weather-hero-icon text-amber" id="heroWeatherIcon"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Quick Key Metrics Strip inside Hero -->
+                    <div class="hero-metric-strip">
+                        <div class="strip-item">
+                            <i class="fa-solid fa-droplet text-cyan"></i>
+                            <div class="strip-text">
+                                <span class="strip-label">Humidity</span>
+                                <span class="strip-value" id="stripHumidity">58%</span>
+                            </div>
+                        </div>
+                        <div class="strip-item">
+                            <i class="fa-solid fa-wind text-teal"></i>
+                            <div class="strip-text">
+                                <span class="strip-label">Wind</span>
+                                <span class="strip-value" id="stripWind">14 km/h</span>
+                            </div>
+                        </div>
+                        <div class="strip-item">
+                            <i class="fa-solid fa-cloud-rain text-indigo"></i>
+                            <div class="strip-text">
+                                <span class="strip-label">Rain Chance</span>
+                                <span class="strip-value" id="stripRain">15%</span>
+                            </div>
+                        </div>
+                        <div class="strip-item">
+                            <i class="fa-solid fa-sun text-amber"></i>
+                            <div class="strip-text">
+                                <span class="strip-label">UV Index</span>
+                                <span class="strip-value" id="stripUV">4.2 (Moderate)</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Smart Weather Insight Banner -->
+                <section class="glass-card insight-banner" id="smartInsightBanner">
+                    <div class="insight-icon" id="insightIcon">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i>
+                    </div>
+                    <div class="insight-content">
+                        <span class="insight-title">AI Atmospheric Insights</span>
+                        <p class="insight-text" id="insightText">Optimal weather conditions for outdoor activities with comfortable humidity.</p>
+                    </div>
+                </section>
+
+                <!-- Interactive Temperature & Humidity Trend Analysis Chart -->
+                <section class="glass-card trend-section">
+                    <div class="section-header">
+                        <div class="section-title-wrap">
+                            <div class="section-icon-badge">
+                                <i class="fa-solid fa-chart-line"></i>
+                            </div>
+                            <div>
+                                <h2 class="section-title">24-Hour Forecast & Trend Dynamics</h2>
+                                <p class="section-subtitle">Interactive hourly curves showing temperature rise/fall and humidity interactions</p>
+                            </div>
+                        </div>
+
+                        <!-- Trend Chart Tab Selector -->
+                        <div class="trend-tabs" role="tablist">
+                            <button class="trend-tab active" data-chart="temp" id="tabTemp">
+                                <i class="fa-solid fa-temperature-half"></i> Temperature
+                            </button>
+                            <button class="trend-tab" data-chart="humidity" id="tabHumidity">
+                                <i class="fa-solid fa-droplet"></i> Humidity
+                            </button>
+                            <button class="trend-tab" data-chart="combined" id="tabCombined" title="See how temperature rise/fall affects humidity levels">
+                                <i class="fa-solid fa-code-compare"></i> Temp vs Humidity
+                            </button>
+                            <button class="trend-tab" data-chart="rain" id="tabRain">
+                                <i class="fa-solid fa-cloud-rain"></i> Rain Chance
+                            </button>
+                            <button class="trend-tab" data-chart="wind" id="tabWind">
+                                <i class="fa-solid fa-wind"></i> Wind Speed
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Dynamic Chart Container -->
+                    <div class="chart-wrapper">
+                        <canvas id="trendChartCanvas" aria-label="Hourly weather trend line chart" role="img"></canvas>
+                    </div>
+
+                    <!-- Dynamic Trend Summary Callout -->
+                    <div class="trend-summary-box" id="trendSummaryBox">
+                        <div class="summary-metric">
+                            <span class="sum-label">Peak Temp:</span>
+                            <span class="sum-val" id="sumPeakTemp">--</span>
+                        </div>
+                        <div class="summary-metric">
+                            <span class="sum-label">Lowest Temp:</span>
+                            <span class="sum-val" id="sumLowTemp">--</span>
+                        </div>
+                        <div class="summary-metric">
+                            <span class="sum-label">Avg Humidity:</span>
+                            <span class="sum-val" id="sumAvgHumidity">--</span>
+                        </div>
+                        <div class="summary-metric">
+                            <span class="sum-label">Max Rain Prob:</span>
+                            <span class="sum-val" id="sumMaxRain">--</span>
+                        </div>
+                    </div>
+
+                    <!-- Horizontal Hourly Cards Slider -->
+                    <div class="hourly-slider-wrap">
+                        <div class="slider-header">
+                            <span class="slider-title"><i class="fa-regular fa-clock"></i> Hour-by-Hour Timeline</span>
+                            <div class="slider-arrows">
+                                <button class="slider-nav-btn" id="slideLeftBtn" aria-label="Scroll left"><i class="fa-solid fa-chevron-left"></i></button>
+                                <button class="slider-nav-btn" id="slideRightBtn" aria-label="Scroll right"><i class="fa-solid fa-chevron-right"></i></button>
+                            </div>
+                        </div>
+                        <div class="hourly-slider-container" id="hourlySlider">
+                            <!-- Populated dynamically via JS -->
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 7-Day Extended Forecast Section -->
+                <section class="glass-card forecast-section">
+                    <div class="section-header">
+                        <div class="section-title-wrap">
+                            <div class="section-icon-badge">
+                                <i class="fa-solid fa-calendar-week"></i>
+                            </div>
+                            <div>
+                                <h2 class="section-title">7-Day Extended Forecast</h2>
+                                <p class="section-subtitle">Weekly temperature ranges, precipitation likelihood, and climate trends</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="daily-forecast-list" id="dailyForecastList">
+                        <!-- Populated dynamically via JS -->
+                    </div>
+                </section>
+
+            </div>
+
+            <!-- Right Column: Meteorological Detail Cards (Humidity, Wind, UV, AQI, Sun Cycle, Pressure) -->
+            <div class="dashboard-side-col">
+                
+                <!-- 1. Deep Humidity & Comfort Analysis -->
+                <section class="glass-card metric-card humidity-focus-card">
+                    <div class="metric-card-header">
+                        <span class="metric-card-title"><i class="fa-solid fa-droplet text-cyan"></i> Humidity & Moisture</span>
+                        <span class="badge" id="comfortBadge">Optimal</span>
+                    </div>
+
+                    <div class="humidity-gauge-wrap">
+                        <div class="humidity-gauge-circle">
+                            <svg class="progress-ring" width="120" height="120" viewBox="0 0 120 120">
+                                <circle class="progress-ring-circle-bg" stroke="rgba(255,255,255,0.08)" stroke-width="9" fill="transparent" r="48" cx="60" cy="60"/>
+                                <circle class="progress-ring-circle" id="humidityRing" stroke="#38bdf8" stroke-width="9" stroke-linecap="round" fill="transparent" r="48" cx="60" cy="60"/>
+                            </svg>
+                            <div class="gauge-center-text">
+                                <span class="gauge-value" id="gaugeHumidityVal">58%</span>
+                                <span class="gauge-label">Relative</span>
+                            </div>
+                        </div>
+
+                        <div class="humidity-details-list">
+                            <div class="hum-detail-row">
+                                <span class="hum-detail-label">Dew Point:</span>
+                                <span class="hum-detail-val" id="dewPointVal">12.4°C</span>
+                            </div>
+                            <div class="hum-detail-row">
+                                <span class="hum-detail-label">Comfort:</span>
+                                <span class="hum-detail-val text-green" id="comfortLevelText">Comfortable</span>
+                            </div>
+                            <div class="hum-detail-row">
+                                <span class="hum-detail-label">Vapor:</span>
+                                <span class="hum-detail-val" id="vaporStatusText">Balanced</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="humidity-comfort-bar-container">
+                        <div class="comfort-bar">
+                            <div class="comfort-indicator-pin" id="comfortPin" style="left: 58%;"></div>
+                        </div>
+                        <div class="comfort-scale-labels">
+                            <span>Dry (0-30%)</span>
+                            <span>Optimal (30-60%)</span>
+                            <span>Humid (60-80%)</span>
+                            <span>Muggy (80%+)</span>
+                        </div>
+                    </div>
+                    
+                    <p class="metric-tip" id="humidityAdvice">Pleasant humidity levels. Comfortable for outdoor workouts and leisure.</p>
+                </section>
+
+                <!-- 2. Wind Speed, Direction & Gusts -->
+                <section class="glass-card metric-card">
+                    <div class="metric-card-header">
+                        <span class="metric-card-title"><i class="fa-solid fa-wind text-teal"></i> Wind & Atmosphere</span>
+                        <span class="badge" id="windLabel">Moderate</span>
+                    </div>
+
+                    <div class="wind-display-grid">
+                        <div class="compass-wrap">
+                            <div class="compass-dial">
+                                <span class="compass-n">N</span>
+                                <span class="compass-e">E</span>
+                                <span class="compass-s">S</span>
+                                <span class="compass-w">W</span>
+                                <div class="compass-pointer" id="compassPointer">
+                                    <i class="fa-solid fa-location-arrow"></i>
+                                </div>
+                            </div>
+                            <span class="compass-bearing" id="compassBearingText">230° SW</span>
+                        </div>
+
+                        <div class="wind-stats">
+                            <div class="stat-box">
+                                <span class="stat-label">Wind Speed</span>
+                                <span class="stat-value" id="windSpeedVal">14.2 <span class="unit-sub">km/h</span></span>
+                            </div>
+                            <div class="stat-box">
+                                <span class="stat-label">Peak Gusts</span>
+                                <span class="stat-value" id="windGustsVal">22.8 <span class="unit-sub">km/h</span></span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 3. Air Quality Index (AQI) -->
+                <section class="glass-card metric-card">
+                    <div class="metric-card-header">
+                        <span class="metric-card-title"><i class="fa-solid fa-lungs text-green"></i> Air Quality Index</span>
+                        <span class="badge badge-aqi" id="aqiBadge">Good</span>
+                    </div>
+
+                    <div class="aqi-main-display">
+                        <div class="aqi-score" id="aqiScore">38</div>
+                        <div class="aqi-desc">
+                            <span class="aqi-status" id="aqiStatusText">Clean & Healthy</span>
+                            <span class="aqi-note">Air quality is satisfactory with low pollution risk.</span>
+                        </div>
+                    </div>
+
+                    <div class="pollutants-grid">
+                        <div class="pollutant-item">
+                            <span class="p-name">PM2.5</span>
+                            <span class="p-val" id="pm25Val">8.4 µg/m³</span>
+                        </div>
+                        <div class="pollutant-item">
+                            <span class="p-name">PM10</span>
+                            <span class="p-val" id="pm10Val">14.1 µg/m³</span>
+                        </div>
+                        <div class="pollutant-item">
+                            <span class="p-name">Ozone (O₃)</span>
+                            <span class="p-val" id="o3Val">42 µg/m³</span>
+                        </div>
+                        <div class="pollutant-item">
+                            <span class="p-name">NO₂</span>
+                            <span class="p-val" id="no2Val">12 µg/m³</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 4. UV Index & Radiation -->
+                <section class="glass-card metric-card">
+                    <div class="metric-card-header">
+                        <span class="metric-card-title"><i class="fa-solid fa-sun text-amber"></i> UV Radiation Index</span>
+                        <span class="badge" id="uvBadge">Moderate</span>
+                    </div>
+
+                    <div class="uv-display-box">
+                        <div class="uv-number" id="uvVal">4.2</div>
+                        <div class="uv-bar-track">
+                            <div class="uv-bar-fill" id="uvBarFill" style="width: 42%;"></div>
+                        </div>
+                    </div>
+                    <p class="metric-tip" id="uvTip">Wear sunglasses on bright days. Use SPF 30+ if staying outdoors for extended periods.</p>
+                </section>
+
+                <!-- 5. Sun & Daylight Horizon Cycle -->
+                <section class="glass-card metric-card">
+                    <div class="metric-card-header">
+                        <span class="metric-card-title"><i class="fa-solid fa-cloud-sun text-orange"></i> Solar Cycle</span>
+                    </div>
+
+                    <div class="solar-cycle-graphic">
+                        <div class="sun-arc-path">
+                            <div class="sun-position-dot" id="sunDot">
+                                <i class="fa-solid fa-sun"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="solar-times-row">
+                        <div class="solar-time-col">
+                            <i class="fa-solid fa-arrow-up-from-bracket text-amber"></i>
+                            <span class="solar-label">Sunrise</span>
+                            <span class="solar-val" id="sunriseTime">06:18</span>
+                        </div>
+                        <div class="solar-divider"></div>
+                        <div class="solar-time-col">
+                            <i class="fa-solid fa-arrow-right-to-bracket text-orange"></i>
+                            <span class="solar-label">Sunset</span>
+                            <span class="solar-val" id="sunsetTime">19:42</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 6. Atmospheric Pressure & Visibility -->
+                <section class="glass-card metric-card">
+                    <div class="metric-card-header">
+                        <span class="metric-card-title"><i class="fa-solid fa-gauge text-cyan"></i> Pressure & Visibility</span>
+                    </div>
+
+                    <div class="dual-metric-row">
+                        <div class="half-metric">
+                            <div class="hm-icon"><i class="fa-solid fa-compass"></i></div>
+                            <div class="hm-text">
+                                <span class="hm-label">Pressure</span>
+                                <span class="hm-val" id="pressureVal">1014.2 <span class="unit-sub">hPa</span></span>
+                                <span class="hm-status text-green">Stable</span>
+                            </div>
+                        </div>
+                        <div class="half-metric">
+                            <div class="hm-icon"><i class="fa-solid fa-eye"></i></div>
+                            <div class="hm-text">
+                                <span class="hm-label">Visibility</span>
+                                <span class="hm-val" id="visibilityVal">10.0 <span class="unit-sub">km</span></span>
+                                <span class="hm-status text-green">Clear</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="app-footer">
+            <p>SkyPulse Weather • Atmospheric Mesh Engine • Powered by Open-Meteo Forecasting Models</p>
+        </footer>
+    </div>
+
+    <!-- Custom JavaScript Application -->
+    <script src="static/js/app.js"></script>
+</body>
+</html>

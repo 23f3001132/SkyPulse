@@ -1,6 +1,6 @@
 /**
  * SkyPulse Weather Forecast - Frontend Application Logic & Aesthetic Background Engine
- * Interactive Chart.js graphs, Open-Meteo API integrations, 60fps Particle Canvas, and Dynamic Theming.
+ * Dual-Mode: Supports both Python Flask Backend (/api/weather) AND Static GitHub Pages (Direct Open-Meteo API).
  */
 
 // Global State
@@ -15,6 +15,38 @@ const state = {
     searchDebounceTimer: null,
     currentParticleMode: 'stars',
     canvasAnimationId: null
+};
+
+// WMO Weather Codes Dictionary
+const WEATHER_CODES = {
+    0: { label: "Clear sky", icon: "clear", description: "Sunny and clear skies" },
+    1: { label: "Mainly clear", icon: "mainly-clear", description: "Mostly clear with slight clouds" },
+    2: { label: "Partly cloudy", icon: "partly-cloudy", description: "Scattered clouds across the sky" },
+    3: { label: "Overcast", icon: "overcast", description: "Dense cloud cover overhead" },
+    45: { label: "Fog", icon: "fog", description: "Low visibility with dense fog" },
+    48: { label: "Depositing rime fog", icon: "fog", description: "Freezing rime fog conditions" },
+    51: { label: "Light drizzle", icon: "drizzle", description: "Light, misty precipitation" },
+    53: { label: "Moderate drizzle", icon: "drizzle", description: "Steady misty drizzle" },
+    55: { label: "Dense drizzle", icon: "drizzle", description: "Frequent and heavy drizzle" },
+    56: { label: "Light freezing drizzle", icon: "freezing-rain", description: "Icy light drizzle" },
+    57: { label: "Dense freezing drizzle", icon: "freezing-rain", description: "Icy heavy drizzle" },
+    61: { label: "Slight rain", icon: "rain", description: "Occasional gentle raindrops" },
+    63: { label: "Moderate rain", icon: "rain", description: "Steady and consistent rainfall" },
+    65: { label: "Heavy rain", icon: "heavy-rain", description: "Intense torrential downpours" },
+    66: { label: "Light freezing rain", icon: "freezing-rain", description: "Freezing raindrops" },
+    67: { label: "Heavy freezing rain", icon: "freezing-rain", description: "Severe freezing rain" },
+    71: { label: "Slight snow fall", icon: "snow", description: "Gentle falling snowflakes" },
+    73: { label: "Moderate snow fall", icon: "snow", description: "Steady blanket of snowfall" },
+    75: { label: "Heavy snow fall", icon: "heavy-snow", description: "Heavy winter snow blizzard" },
+    77: { label: "Snow grains", icon: "snow", description: "Small icy snow grains" },
+    80: { label: "Slight rain showers", icon: "showers", description: "Brief passing rain showers" },
+    81: { label: "Moderate rain showers", icon: "showers", description: "Periodic heavy rain bursts" },
+    82: { label: "Violent rain showers", icon: "heavy-rain", description: "Severe torrential rain bursts" },
+    85: { label: "Slight snow showers", icon: "snow", description: "Scattered brief snow flurries" },
+    86: { label: "Heavy snow showers", icon: "heavy-snow", description: "Intense drifting snow showers" },
+    95: { label: "Thunderstorm", icon: "thunderstorm", description: "Active thunder and lightning" },
+    96: { label: "Thunderstorm with slight hail", icon: "thunder-hail", description: "Thunderstorm with small hailstones" },
+    99: { label: "Thunderstorm with heavy hail", icon: "thunder-hail", description: "Severe storm with damaging hail" }
 };
 
 // Weather icon helper mapping to FontAwesome icons
@@ -345,13 +377,38 @@ function handleGeolocation() {
 }
 
 /**
- * City Search Geocoding Autocomplete
+ * City Search Geocoding Autocomplete (Dual-Mode)
  */
 async function searchCities(query) {
     try {
-        const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
-        if (!response.ok) return;
-        const results = await response.json();
+        let results = [];
+        // Try Backend API First
+        try {
+            const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+            if (response.ok) {
+                results = await response.json();
+            }
+        } catch {
+            results = [];
+        }
+
+        // Static fallback to direct Open-Meteo Geocoding API
+        if (!results || results.length === 0) {
+            const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=6&language=en&format=json`);
+            if (geoRes.ok) {
+                const geoData = await geoRes.json();
+                results = (geoData.results || []).map(item => ({
+                    id: item.id,
+                    name: item.name,
+                    display_name: `${item.name}${item.admin1 ? ', ' + item.admin1 : ''}, ${item.country || ''}`,
+                    latitude: item.latitude,
+                    longitude: item.longitude,
+                    country: item.country || '',
+                    country_code: (item.country_code || '').toUpperCase(),
+                    admin1: item.admin1 || ''
+                }));
+            }
+        }
 
         if (!results || results.length === 0) {
             elements.suggestionsDropdown.innerHTML = '<div class="suggestion-item"><span>No matching cities found</span></div>';
@@ -371,7 +428,6 @@ async function searchCities(query) {
 
         elements.suggestionsDropdown.classList.remove('hidden');
 
-        // Add click events on suggestions
         elements.suggestionsDropdown.querySelectorAll('.suggestion-item').forEach(item => {
             item.addEventListener('click', () => {
                 const lat = item.getAttribute('data-lat');
@@ -394,39 +450,50 @@ async function searchCities(query) {
 }
 
 /**
- * Fetch Weather Data from Flask Backend API
+ * Fetch Weather Data (Dual-Mode: Flask Backend + Direct Open-Meteo Fallback for GitHub Pages)
  */
 async function fetchWeatherData(params = {}) {
     showLoading(true);
     elements.errorToast.classList.add('hidden');
 
-    let url = `/api/weather?units=${state.units}`;
-    if (params.lat && params.lon) {
-        url += `&lat=${params.lat}&lon=${params.lon}`;
-        if (params.name) url += `&name=${encodeURIComponent(params.name)}`;
-        if (params.country) url += `&country=${encodeURIComponent(params.country)}`;
-    } else if (params.city) {
-        url += `&city=${encodeURIComponent(params.city)}`;
-    } else {
-        url += `&city=${encodeURIComponent(state.city)}`;
-    }
-
     try {
-        const response = await fetch(url);
-        const data = await response.json();
+        let data = null;
 
-        if (!response.ok || data.error) {
-            throw new Error(data.error || 'Failed to fetch weather data.');
+        // 1. Try Flask Backend endpoint first
+        try {
+            let url = `/api/weather?units=${state.units}`;
+            if (params.lat && params.lon) {
+                url += `&lat=${params.lat}&lon=${params.lon}`;
+                if (params.name) url += `&name=${encodeURIComponent(params.name)}`;
+                if (params.country) url += `&country=${encodeURIComponent(params.country)}`;
+            } else if (params.city) {
+                url += `&city=${encodeURIComponent(params.city)}`;
+            } else {
+                url += `&city=${encodeURIComponent(state.city)}`;
+            }
+            const response = await fetch(url);
+            if (response.ok) {
+                const resJson = await response.json();
+                if (!resJson.error) data = resJson;
+            }
+        } catch {
+            data = null;
+        }
+
+        // 2. If running on static host (GitHub Pages) where backend is absent:
+        if (!data) {
+            data = await fetchDirectOpenMeteo(params);
+        }
+
+        if (!data) {
+            throw new Error('Could not retrieve weather data.');
         }
 
         state.weatherData = data;
         state.city = data.location.name;
         state.coords = { lat: data.location.lat, lon: data.location.lon };
 
-        // Save to Recent Searches
         saveRecentSearch(data.location.name, data.location.country);
-
-        // Update All UI Views
         renderDashboard(data);
         showLoading(false);
 
@@ -437,22 +504,235 @@ async function fetchWeatherData(params = {}) {
 }
 
 /**
+ * Direct Client-Side Open-Meteo Processing (For 100% Static GitHub Pages Hosting)
+ */
+async function fetchDirectOpenMeteo(params) {
+    let lat = params.lat;
+    let lon = params.lon;
+    let locName = params.name || params.city || state.city;
+    let locCountry = params.country || '';
+
+    // Resolve coordinates if missing
+    if (!lat || !lon) {
+        const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(locName)}&count=1&language=en&format=json`;
+        const geoRes = await fetch(geoUrl);
+        const geoData = await geoRes.json();
+        if (geoData.results && geoData.results.length > 0) {
+            lat = geoData.results[0].latitude;
+            lon = geoData.results[0].longitude;
+            locName = geoData.results[0].name;
+            locCountry = geoData.results[0].country_code || geoData.results[0].country || '';
+        } else {
+            throw new Error(`Location '${locName}' not found.`);
+        }
+    }
+
+    const tempUnit = state.units === 'imperial' ? 'fahrenheit' : 'celsius';
+    const windUnit = state.units === 'imperial' ? 'mph' : 'kmh';
+    const precipUnit = state.units === 'imperial' ? 'inch' : 'mm';
+
+    const wUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,showers,snowfall,weather_code,cloud_cover,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m&hourly=temperature_2m,relative_humidity_2m,dew_point_2m,apparent_temperature,precipitation_probability,precipitation,weather_code,surface_pressure,cloud_cover,visibility,wind_speed_10m,wind_direction_10m,uv_index,is_day&daily=weather_code,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,sunrise,sunset,uv_index_max,precipitation_sum,precipitation_probability_max,wind_speed_10m_max&temperature_unit=${tempUnit}&wind_speed_unit=${windUnit}&precipitation_unit=${precipUnit}&timezone=auto`;
+    const aqUrl = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=us_aqi,pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,sulphur_dioxide,ozone&timezone=auto`;
+
+    const [wRes, aqRes] = await Promise.all([
+        fetch(wUrl),
+        fetch(aqUrl).catch(() => null)
+    ]);
+
+    const weatherData = await wRes.json();
+    let aqData = {};
+    if (aqRes && aqRes.ok) {
+        const aqJson = await aqRes.json();
+        aqData = aqJson.current || {};
+    }
+
+    const current = weatherData.current || {};
+    const hourly = weatherData.hourly || {};
+    const daily = weatherData.daily || {};
+
+    const code = current.weather_code || 0;
+    const wInfo = WEATHER_CODES[code] || { label: "Clear sky", icon: "clear", description: "Clear conditions" };
+    const tempVal = current.temperature_2m || 0;
+    const humVal = current.relative_humidity_2m || 0;
+
+    const tempC = state.units === 'imperial' ? ((tempVal - 32) * 5 / 9) : tempVal;
+    const comfort = calculateHumidityComfort(tempC, humVal);
+    let dewPoint = calculateDewPoint(tempC, humVal);
+    if (state.units === 'imperial') dewPoint = Math.round(((dewPoint * 9 / 5) + 32) * 10) / 10;
+
+    // Process 24 hours
+    const hourlyTimes = hourly.time || [];
+    let startIdx = 0;
+    if (current.time && hourlyTimes.includes(current.time)) {
+        startIdx = hourlyTimes.indexOf(current.time);
+    }
+
+    const next24 = [];
+    const chartLabels = [];
+    const chartTemps = [];
+    const chartHum = [];
+    const chartRain = [];
+    const chartWind = [];
+    const chartDew = [];
+
+    const totalHours = Math.min(hourlyTimes.length, startIdx + 24);
+    for (let i = startIdx; i < totalHours; i++) {
+        const tStr = hourlyTimes[i];
+        const hCode = (hourly.weather_code || [])[i] || 0;
+        const hInfo = WEATHER_CODES[hCode] || { label: "Clear sky", icon: "clear" };
+        const isDay = (hourly.is_day || [])[i] !== undefined ? hourly.is_day[i] : 1;
+        const timePart = tStr.includes('T') ? tStr.split('T')[1].slice(0, 5) : tStr;
+
+        const item = {
+            time: tStr,
+            time_display: i === startIdx ? 'Now' : timePart,
+            temp: Math.round(((hourly.temperature_2m || [])[i] || 0) * 10) / 10,
+            humidity: (hourly.relative_humidity_2m || [])[i] || 0,
+            dew_point: Math.round(((hourly.dew_point_2m || [])[i] || 0) * 10) / 10,
+            rain_prob: (hourly.precipitation_probability || [])[i] || 0,
+            wind_speed: Math.round(((hourly.wind_speed_10m || [])[i] || 0) * 10) / 10,
+            weather_code: hCode,
+            weather_label: hInfo.label,
+            icon: hInfo.icon,
+            is_day: isDay
+        };
+        next24.push(item);
+        chartLabels.push(item.time_display);
+        chartTemps.push(item.temp);
+        chartHum.push(item.humidity);
+        chartRain.push(item.rain_prob);
+        chartWind.push(item.wind_speed);
+        chartDew.push(item.dew_point);
+    }
+
+    // Process 7 Days
+    const dailyForecast = [];
+    const dTimes = daily.time || [];
+    for (let i = 0; i < dTimes.length; i++) {
+        const dCode = (daily.weather_code || [])[i] || 0;
+        const dInfo = WEATHER_CODES[dCode] || { label: "Clear", icon: "clear" };
+        const sr = (daily.sunrise || [])[i] || '';
+        const ss = (daily.sunset || [])[i] || '';
+
+        dailyForecast.push({
+            date: dTimes[i],
+            temp_max: Math.round(((daily.temperature_2m_max || [])[i] || 0) * 10) / 10,
+            temp_min: Math.round(((daily.temperature_2m_min || [])[i] || 0) * 10) / 10,
+            weather_code: dCode,
+            weather_label: dInfo.label,
+            icon: dInfo.icon,
+            sunrise: sr.includes('T') ? sr.split('T')[1].slice(0, 5) : sr,
+            sunset: ss.includes('T') ? ss.split('T')[1].slice(0, 5) : ss,
+            uv_max: Math.round(((daily.uv_index_max || [])[i] || 0) * 10) / 10,
+            rain_prob_max: (daily.precipitation_probability_max || [])[i] || 0
+        });
+    }
+
+    // AQI rating
+    const usAqi = aqData.us_aqi;
+    let aqiStatus = "Good";
+    let aqiColor = "#10b981";
+    if (usAqi !== undefined && usAqi !== null) {
+        if (usAqi <= 50) { aqiStatus = "Good"; aqiColor = "#10b981"; }
+        else if (usAqi <= 100) { aqiStatus = "Moderate"; aqiColor = "#f59e0b"; }
+        else if (usAqi <= 150) { aqiStatus = "Unhealthy (Sensitive)"; aqiColor = "#f97316"; }
+        else { aqiStatus = "Unhealthy"; aqiColor = "#ef4444"; }
+    }
+
+    const curUV = (hourly.uv_index && startIdx < hourly.uv_index.length) ? hourly.uv_index[startIdx] : 0;
+    const curVis = (hourly.visibility && startIdx < hourly.visibility.length) ? hourly.visibility[startIdx] : 10000;
+    const visVal = state.units === 'imperial' ? (curVis / 1609.34) : (curVis / 1000);
+
+    return {
+        location: {
+            name: locName,
+            country: locCountry,
+            lat: lat,
+            lon: lon,
+            timezone: weatherData.timezone || "UTC"
+        },
+        units: {
+            system: state.units,
+            temp: state.units === 'imperial' ? '°F' : '°C',
+            wind: state.units === 'imperial' ? 'mph' : 'km/h',
+            vis: state.units === 'imperial' ? 'mi' : 'km'
+        },
+        current: {
+            time: current.time || new Date().toISOString(),
+            temp: Math.round(tempVal * 10) / 10,
+            feels_like: Math.round((current.apparent_temperature || tempVal) * 10) / 10,
+            humidity: humVal,
+            dew_point: dewPoint,
+            comfort: comfort,
+            weather_code: code,
+            weather_label: wInfo.label,
+            description: wInfo.description,
+            icon: wInfo.icon,
+            is_day: current.is_day !== undefined ? current.is_day : 1,
+            wind_speed: Math.round((current.wind_speed_10m || 0) * 10) / 10,
+            wind_direction: current.wind_direction_10m || 0,
+            wind_gusts: Math.round((current.wind_gusts_10m || 0) * 10) / 10,
+            pressure: Math.round((current.surface_pressure || 1013) * 10) / 10,
+            uv_index: Math.round(curUV * 10) / 10,
+            visibility: Math.round(visVal * 10) / 10,
+            aqi: {
+                value: usAqi !== undefined && usAqi !== null ? usAqi : "--",
+                status: aqiStatus,
+                color: aqiColor,
+                pm2_5: aqData.pm2_5 !== undefined ? aqData.pm2_5 : "--",
+                pm10: aqData.pm10 !== undefined ? aqData.pm10 : "--",
+                o3: aqData.ozone !== undefined ? aqData.ozone : "--",
+                no2: aqData.nitrogen_dioxide !== undefined ? aqData.nitrogen_dioxide : "--"
+            }
+        },
+        hourly_timeline: next24,
+        chart_data: {
+            labels: chartLabels,
+            temperatures: chartTemps,
+            humidity: chartHum,
+            rain_prob: chartRain,
+            wind: chartWind,
+            dew_point: chartDew
+        },
+        daily_forecast: dailyForecast,
+        insights: [
+            { text: humVal > 75 ? `High humidity (${humVal}%). Weather feels muggier.` : "Optimal weather conditions for outdoor activities." }
+        ]
+    };
+}
+
+function calculateHumidityComfort(tempC, humidity) {
+    if (humidity < 30) return { level: "Dry", color: "#60a5fa", advice: "Air is dry. Keep hydrated." };
+    if (humidity <= 60) return { level: "Optimal", color: "#10b981", advice: "Pleasant humidity levels. Comfortable outdoors." };
+    if (humidity <= 80) return { level: "Humid", color: "#f59e0b", advice: "Noticeably humid. Dress lightly." };
+    return { level: "Very Muggy", color: "#ef4444", advice: "High moisture in air. Feels muggy." };
+}
+
+function calculateDewPoint(tempC, humidity) {
+    const a = 17.27;
+    const b = 237.7;
+    try {
+        const alpha = ((a * tempC) / (b + tempC)) + Math.log(Math.max(humidity, 1) / 100.0);
+        return Math.round(((b * alpha) / (a - alpha)) * 10) / 10;
+    } catch {
+        return Math.round((tempC - ((100 - humidity) / 5)) * 10) / 10;
+    }
+}
+
+/**
  * Render Complete Weather Dashboard
  */
 function renderDashboard(data) {
     const { location, current, units, hourly_timeline, chart_data, daily_forecast, insights } = data;
 
-    // 1. Update Dynamic Body Background Theme (if auto mode)
     if (state.themeMode === 'auto') {
         updateWeatherTheme(current.weather_code, current.is_day);
     }
 
-    // 2. Location & Date/Time
     elements.locName.textContent = location.name;
     elements.locCountry.textContent = location.country || 'GLOBAL';
     elements.locTimezone.textContent = location.timezone;
     
-    // Format local time from ISO string
     try {
         const dateObj = new Date(current.time);
         const options = { weekday: 'long', hour: '2-digit', minute: '2-digit' };
@@ -461,37 +741,30 @@ function renderDashboard(data) {
         elements.locTime.textContent = current.time.replace('T', ' ');
     }
 
-    // 3. Current Weather Hero
     elements.conditionLabel.textContent = current.weather_label;
     elements.currentTemp.innerHTML = `${Math.round(current.temp)}<span class="unit-symbol">${units.temp}</span>`;
     elements.feelsLikeTemp.textContent = `${Math.round(current.feels_like)}${units.temp}`;
     elements.conditionDescription.textContent = current.description;
 
-    // Min / Max range from daily[0]
     if (daily_forecast && daily_forecast.length > 0) {
         elements.dayMinTemp.textContent = `${Math.round(daily_forecast[0].temp_min)}${units.temp}`;
         elements.dayMaxTemp.textContent = `${Math.round(daily_forecast[0].temp_max)}${units.temp}`;
     }
 
-    // Hero Weather Icon
     updateWeatherIcon(elements.heroWeatherIcon, current.icon, current.is_day);
 
-    // Hero Metric Strip
     elements.stripHumidity.textContent = `${current.humidity}%`;
     elements.stripWind.textContent = `${current.wind_speed} ${units.wind}`;
     elements.stripRain.textContent = `${hourly_timeline.length > 0 ? hourly_timeline[0].rain_prob : 0}%`;
     elements.stripUV.textContent = `${current.uv_index} (${getUVLevel(current.uv_index)})`;
 
-    // 4. Smart Insight Banner
     if (insights && insights.length > 0) {
         elements.insightText.textContent = insights[0].text;
     }
 
-    // 5. Render Trend Chart (Chart.js)
     renderTrendChart();
 
-    // 6. Trend Summary Stats
-    if (chart_data) {
+    if (chart_data && chart_data.temperatures.length > 0) {
         const maxT = Math.max(...chart_data.temperatures);
         const minT = Math.min(...chart_data.temperatures);
         const avgH = Math.round(chart_data.humidity.reduce((a, b) => a + b, 0) / (chart_data.humidity.length || 1));
@@ -503,13 +776,8 @@ function renderDashboard(data) {
         elements.sumMaxRain.textContent = `${maxR}%`;
     }
 
-    // 7. Render Hourly Timeline Horizontal Cards
     renderHourlyTimeline(hourly_timeline, units);
-
-    // 8. Render 7-Day Forecast
     renderDailyForecast(daily_forecast, units);
-
-    // 9. Render Deep Side Metric Cards
     renderSideMetrics(current, daily_forecast, units);
 }
 
@@ -523,12 +791,10 @@ function renderTrendChart() {
     const units = state.weatherData.units;
     const ctx = elements.trendChartCanvas.getContext('2d');
 
-    // Destroy previous chart instance if exists
     if (state.chartInstance) {
         state.chartInstance.destroy();
     }
 
-    // Gradients
     const tempGradient = ctx.createLinearGradient(0, 0, 0, 260);
     tempGradient.addColorStop(0, 'rgba(56, 189, 248, 0.45)');
     tempGradient.addColorStop(1, 'rgba(56, 189, 248, 0.0)');
@@ -590,7 +856,6 @@ function renderTrendChart() {
         scales.y.min = 0;
         scales.y.max = 100;
     } else if (state.activeChartTab === 'combined') {
-        // Temperature vs Humidity Correlation View
         datasets.push({
             label: `Temperature (${units.temp})`,
             data: chartData.temperatures,
@@ -782,7 +1047,6 @@ function renderDailyForecast(dailyList, units) {
  * Render Side Column Detailed Meteorological Metrics
  */
 function renderSideMetrics(current, dailyList, units) {
-    // 1. Humidity & Dew Point
     const humVal = current.humidity;
     elements.gaugeHumidityVal.textContent = `${humVal}%`;
     elements.dewPointVal.textContent = `${current.dew_point}${units.temp}`;
@@ -794,12 +1058,10 @@ function renderSideMetrics(current, dailyList, units) {
 
     elements.comfortPin.style.left = `${Math.min(Math.max(humVal, 5), 95)}%`;
 
-    // SVG Circular Gauge Animation
     const offset = 301.59 - (301.59 * humVal) / 100;
     elements.humidityRing.style.strokeDashoffset = offset;
     elements.humidityRing.style.stroke = current.comfort.color;
 
-    // 2. Wind Speed & Compass
     elements.windSpeedVal.innerHTML = `${current.wind_speed} <span class="unit-sub">${units.wind}</span>`;
     elements.windGustsVal.innerHTML = `${current.wind_gusts} <span class="unit-sub">${units.wind}</span>`;
     
@@ -812,7 +1074,6 @@ function renderSideMetrics(current, dailyList, units) {
     else if (current.wind_speed < 45) elements.windLabel.textContent = 'Breezy';
     else elements.windLabel.textContent = 'Strong Gale';
 
-    // 3. Air Quality
     const aqi = current.aqi;
     elements.aqiScore.textContent = aqi.value;
     elements.aqiScore.style.color = aqi.color;
@@ -825,7 +1086,6 @@ function renderSideMetrics(current, dailyList, units) {
     elements.o3Val.textContent = aqi.o3 !== '--' ? `${aqi.o3} µg/m³` : '--';
     elements.no2Val.textContent = aqi.no2 !== '--' ? `${aqi.no2} µg/m³` : '--';
 
-    // 4. UV Radiation
     const uv = current.uv_index;
     elements.uvVal.textContent = uv;
     elements.uvBadge.textContent = getUVLevel(uv);
@@ -837,7 +1097,6 @@ function renderSideMetrics(current, dailyList, units) {
     else if (uv < 8) elements.uvTip.textContent = 'High UV risk. Seek shade, wear a hat and apply SPF 30+ sunscreen.';
     else elements.uvTip.textContent = 'Very High / Extreme UV! Avoid prolonged sun exposure during peak hours.';
 
-    // 5. Sun & Daylight Horizon Cycle
     if (dailyList && dailyList.length > 0) {
         const todayForecast = dailyList[0];
         elements.sunriseTime.textContent = todayForecast.sunrise || '--:--';
@@ -865,13 +1124,12 @@ function renderSideMetrics(current, dailyList, units) {
         }
     }
 
-    // 6. Pressure & Visibility
     elements.pressureVal.innerHTML = `${current.pressure} <span class="unit-sub">hPa</span>`;
     elements.visibilityVal.innerHTML = `${current.visibility} <span class="unit-sub">${units.vis}</span>`;
 }
 
 /**
- * Dynamic Atmospheric Theme Switcher (Auto Weather Driven)
+ * Dynamic Atmospheric Theme Switcher
  */
 function updateWeatherTheme(weatherCode, isDay) {
     if (state.themeMode !== 'auto') return;
@@ -919,7 +1177,6 @@ function initAestheticBackgroundEngine() {
     window.addEventListener('resize', resizeCanvas);
     resizeCanvas();
 
-    // Cursor Spotlight Tracking
     if (elements.cursorGlow) {
         document.addEventListener('mousemove', (e) => {
             elements.cursorGlow.style.left = `${e.clientX}px`;
@@ -935,7 +1192,6 @@ function initAestheticBackgroundEngine() {
     function animate() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // Render Lightning Flash in Storm Mode
         if (state.currentParticleMode === 'thunder') {
             if (Math.random() < 0.008) {
                 lightningFlash = 0.25;
@@ -947,13 +1203,11 @@ function initAestheticBackgroundEngine() {
             }
         }
 
-        // Render Particle Sets
         particles.forEach(p => {
             p.update(canvas.width, canvas.height);
             p.draw(ctx);
         });
 
-        // Render Shooting Meteors in Night Mode
         if (state.currentParticleMode === 'stars') {
             if (Math.random() < 0.012 && meteors.length < 3) {
                 meteors.push(new Meteor(canvas.width, canvas.height));
@@ -1003,7 +1257,6 @@ function createParticles(mode) {
 }
 
 // Particle Classes
-
 class StarParticle {
     constructor(w, h) {
         this.x = Math.random() * w;
