@@ -1,5 +1,6 @@
 # 🌤️ SkyPulse — Real-Time Weather & Atmospheric Trend Forecasting Platform
 
+<<<<<<< HEAD
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
   <img src="https://img.shields.io/badge/Flask-3.x-000000?style=for-the-badge&logo=flask&logoColor=white" alt="Flask" />
@@ -28,6 +29,11 @@
 ## 🌟 Key Features
 
 ### 1. 📊 Interactive Temperature & Humidity Trend Analysis (Core Feature)
+=======
+🌟 Key Features
+
+# 1. 📊 Interactive Temperature & Humidity Trend Analysis (Core Feature)
+>>>>>>> 0472e3ae8a805d132d0aab6e8ec533dde7071a59
 - **Multi-Mode 24-Hour Graph (Powered by Chart.js 4.x)**:
   - 🌡️ **Temperature Curve**: Visualizes real-time hourly temperature increases and drops with gradient fills.
   - 💧 **Humidity Curve**: Tracks relative moisture saturation levels throughout the day.
@@ -36,13 +42,21 @@
   - 💨 **Wind Speed & Gusts**: Hourly wind variations.
 - **Hour-by-Hour Timeline Slider**: Horizontal card slider displaying 24-hour mini-icons, temps, and humidity badges.
 
+<<<<<<< HEAD
 ### 2. 🔍 Global Search & Geolocation
+=======
+# 2. 🔍 Global Search & Geolocation
+>>>>>>> 0472e3ae8a805d132d0aab6e8ec533dde7071a59
 - **Worldwide Geocoding Auto-complete**: Fast, debounced search suggestions for cities, regions, and countries.
 - **GPS "Auto Locate"**: One-click instant location detection via the HTML5 Geolocation API.
 - **Popular Location Chips**: Instant access to London, New York, Tokyo, Paris, Dubai, Mumbai, Patna, Sydney, and Singapore.
 - **Recent Search History**: Persisted in browser `localStorage`.
 
+<<<<<<< HEAD
 ### 3. 🔬 Complete Meteorological & Environmental Suite
+=======
+# 3. 🔬 Complete Meteorological & Environmental Suite
+>>>>>>> 0472e3ae8a805d132d0aab6e8ec533dde7071a59
 - 💧 **Humidity Gauge & Dew Point**: Circular SVG progress gauge, mathematical Dew Point computation, and a 4-tier Comfort Level indicator (*Dry, Optimal, Humid, Muggy*).
 - 🧭 **Atmospheric Wind & Compass**: Real-time wind speed, gusts, and an interactive 360° rotating compass needle.
 - 🫁 **Air Quality Index (AQI)**: US AQI score, health status rating, and breakdown of key pollutants ($PM_{2.5}$, $PM_{10}$, $O_3$, $NO_2$).
@@ -50,7 +64,11 @@
 - 🌅 **Solar Horizon Cycle**: Sunrise/sunset times with an astronomical solar arc tracking current sun position.
 - ⏱️ **Barometric Pressure & Visibility**: Atmospheric pressure in $hPa$ and visibility distance in $km$/$mi$.
 
+<<<<<<< HEAD
 ### 4. 🌌 Aesthetic Dynamic Background & 60fps Particle Engine
+=======
+# 4. 🌌 Aesthetic Dynamic Background & 60fps Particle Engine
+>>>>>>> 0472e3ae8a805d132d0aab6e8ec533dde7071a59
 - **Atmospheric Particle Canvas**:
   - 🌌 **Starry Night**: Twinkling stars with pulsing alphas and periodic **shooting meteors** with gradient light trails.
   - ☀️ **Golden Daylight**: Floating warm sun-dust bokeh particles.
@@ -62,6 +80,7 @@
 
 ---
 
+<<<<<<< HEAD
 ## 🛠️ Tech Stack
 
 ```
@@ -237,3 +256,9 @@ This project is open-source and available under the **[MIT License](LICENSE)**.
 <p align="center">
   Developed with ❤️ using <strong>Python Flask</strong> and <strong>Modern Vanilla JavaScript</strong>.
 </p>
+=======
+# 🛠️ Tech Stack
+┌──────────────────────────────────────────────────────────┐ │ FRONTEND / UI LAYER │ │ HTML5 • Vanilla CSS3 (Glassmorphism) • JavaScript │ ├──────────────────────────────────────────────────────────┤ │ DATA VISUALIZATION & GRAPHICS ENGINE │ │ Chart.js 4.x (Dual-Axis Trends) • HTML5 Canvas 2D │ ├──────────────────────────────────────────────────────────┤ │ BACKEND LAYER │ │ Python 3.12 • Flask 3.x REST API Server │ ├──────────────────────────────────────────────────────────┤ │ METEOROLOGICAL DATA & APIS │ │ Open-Meteo Weather API • Geocoding API • AQI API │ └──────────────────────────────────────────────────────────┘
+
+
+>>>>>>> 0472e3ae8a805d132d0aab6e8ec533dde7071a59
